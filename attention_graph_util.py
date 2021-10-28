@@ -1,74 +1,60 @@
 import networkx as nx
 import numpy as np
-import tensorflow as tf
-import matplotlib.pyplot as plt
-import os
-import tensorflow as tf
 
 def get_adjmat(mat, input_tokens):
     n_layers, length, _ = mat.shape
     adj_mat = np.zeros(((n_layers+1)*length, (n_layers+1)*length))
-    labels_to_index = {}
-    for k in np.arange(length):
-        labels_to_index[str(k)+"_"+input_tokens[k]] = k
+    labels_to_index = {
+            f"{k}_{input_tokens[k]}": k
+                for k in range(length)
+        }
 
-    for i in np.arange(1,n_layers+1):
-        for k_f in np.arange(length):
-            index_from = (i)*length+k_f
-            label = "L"+str(i)+"_"+str(k_f)
-            labels_to_index[label] = index_from
-            for k_t in np.arange(length):
-                index_to = (i-1)*length+k_t
-                adj_mat[index_from][index_to] = mat[i-1][k_f][k_t]
-                
-    return adj_mat, labels_to_index 
+    for i in np.arange(n_layers) + 1:
+        labels_to_index.update({
+                f"L{i}_{k}": (i * length) + k
+                    for k in range(length)
+            })
 
+        adj_mat[i*length:(i+1)*length,(i-1)*length:i*length] = mat[i-1]
+
+    return adj_mat, labels_to_index
 
 def draw_attention_graph(adjmat, labels_to_index, n_layers, length):
-    A = adjmat
+    # apparently if you give a complex type to a scalar input value,
+    # the numpy array constructor uses it for all the subtypes
+    A = np.array(adjmat, dtype=[('weight', 'f4'), ('capacity', 'f4')])
     G=nx.from_numpy_matrix(A, create_using=nx.DiGraph())
-    for i in np.arange(A.shape[0]):
-        for j in np.arange(A.shape[1]):
-            nx.set_edge_attributes(G, {(i,j): A[i,j]}, 'capacity')
 
     pos = {}
     label_pos = {}
     for i in np.arange(n_layers+1):
         for k_f in np.arange(length):
-            pos[i*length+k_f] = ((i+0.4)*2, length - k_f)
-            label_pos[i*length+k_f] = (i*2, length - k_f)
+            pos[      i*length+k_f] = ((i+0.4)*2, length - k_f)
+            label_pos[i*length+k_f] = (i*2      , length - k_f)
 
-    index_to_labels = {}
-    for key in labels_to_index:
-        index_to_labels[labels_to_index[key]] = key.split("_")[-1]
-        if labels_to_index[key] >= length:
-            index_to_labels[labels_to_index[key]] = ''
+    index_to_labels = {
+            value: key.split("_")[-1]
+                for key, value in labels_to_index.items()
+                    if value < length
+        }
 
-    #plt.figure(1,figsize=(20,12))
-
-    nx.draw_networkx_nodes(G,pos,node_color='green', labels=index_to_labels, node_size=50)
+    nx.draw_networkx_nodes(G,pos,node_color='green', node_size=50)
     nx.draw_networkx_labels(G,pos=label_pos, labels=index_to_labels, font_size=18)
 
-    all_weights = []
-    #4 a. Iterate through the graph nodes to gather all the weights
-    for (node1,node2,data) in G.edges(data=True):
-        all_weights.append(data['weight']) #we'll use this when determining edge thickness
-
-    #4 b. Get unique weights
-    unique_weights = list(set(all_weights))
-
-    #4 c. Plot the edges - one by one!
-    for weight in unique_weights:
-        #4 d. Form a filtered list with just the weight you want to draw
-        weighted_edges = [(node1,node2) for (node1,node2,edge_attr) in G.edges(data=True) if edge_attr['weight']==weight]
-        #4 e. I think multiplying by [num_nodes/sum(all_weights)] makes the graphs edges look cleaner
-        
-        w = weight #(weight - min(all_weights))/(max(all_weights) - min(all_weights))
-        width = w
-        nx.draw_networkx_edges(G,pos,edgelist=weighted_edges,width=width, edge_color='darkblue')
-    
+    edges, edge_widths = zip(*[
+            ( (node1, node2), attr['weight'] + 0.5,)
+                for node1, node2, attr in G.edges(data=True)
+        ])
+    nx.draw_networkx_edges(
+            G,
+            pos,
+            edgelist=edges,
+            width=edge_widths,
+            arrowsize=5, # smaller than default arrows
+            edge_color='darkblue'
+        )
     return G
-    
+
 def compute_flows(G, labels_to_index, input_nodes, length):
     number_of_nodes = len(labels_to_index)
     flow_values=np.zeros((number_of_nodes,number_of_nodes))
