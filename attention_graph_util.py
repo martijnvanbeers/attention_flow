@@ -53,6 +53,7 @@ def draw_attention_graph(adjmat, labels_to_index, n_layers, length):
             arrowsize=5, # smaller than default arrows
             edge_color='darkblue'
         )
+
     return G
 
 def compute_flows(G, labels_to_index, input_nodes, length):
@@ -68,7 +69,7 @@ def compute_flows(G, labels_to_index, input_nodes, length):
                 flow_value = nx.maximum_flow_value(G,u,v, flow_func=nx.algorithms.flow.edmonds_karp)
                 flow_values[u][pre_layer*length+v ] = flow_value
             flow_values[u] /= flow_values[u].sum()
-            
+
     return flow_values
 
 def compute_node_flow(G, labels_to_index, input_nodes, output_nodes,length):
@@ -84,22 +85,23 @@ def compute_node_flow(G, labels_to_index, input_nodes, output_nodes,length):
                 flow_value = nx.maximum_flow_value(G,u,v, flow_func=nx.algorithms.flow.edmonds_karp)
                 flow_values[u][pre_layer*length+v ] = flow_value
             flow_values[u] /= flow_values[u].sum()
-            
+
     return flow_values
 
 def compute_joint_attention(att_mat, add_residual=True):
     if add_residual:
-        residual_att = np.eye(att_mat.shape[1])[None,...]
+        residual_att = np.eye(att_mat.shape[-1])[None,...]
         aug_att_mat = att_mat + residual_att
         aug_att_mat = aug_att_mat / aug_att_mat.sum(axis=-1)[...,None]
     else:
        aug_att_mat =  att_mat
-    
+
     joint_attentions = np.zeros(aug_att_mat.shape)
 
     layers = joint_attentions.shape[0]
     joint_attentions[0] = aug_att_mat[0]
     for i in np.arange(1,layers):
-        joint_attentions[i] = aug_att_mat[i].dot(joint_attentions[i-1])
-        
+        # matmul does dot product on the last two axes,
+        joint_attentions[i] = np.matmul(aug_att_mat[i], joint_attentions[i-1])
+
     return joint_attentions
