@@ -1,3 +1,4 @@
+import colorsys
 import networkx as nx
 import numpy as np
 
@@ -19,7 +20,7 @@ def get_adjmat(mat, input_tokens):
 
     return adj_mat, labels_to_index
 
-def draw_attention_graph(adjmat, labels_to_index, n_layers, length):
+def draw_attention_graph(adjmat, labels_to_index, n_layers, length, draw_edge_labels=False, limits=None):
     # apparently if you give a complex type to a scalar input value,
     # the numpy array constructor uses it for all the subtypes
     A = np.array(adjmat, dtype=[('weight', 'f4'), ('capacity', 'f4')])
@@ -41,9 +42,29 @@ def draw_attention_graph(adjmat, labels_to_index, n_layers, length):
     nx.draw_networkx_nodes(G,pos,node_color='green', node_size=50)
     nx.draw_networkx_labels(G,pos=label_pos, labels=index_to_labels, font_size=18)
 
-    edges, edge_widths = zip(*[
-            ( (node1, node2), attr['weight'] + 0.5,)
+    edges, edge_widths, edge_colors = zip(*[
+            (
+                (node1, node2),
+                attr['weight'] + 0.5,
+                colorsys.hsv_to_rgb(
+                    # hue; pick something blue
+                    0.62,
+                    # saturation, based on weight, but
+                    # remapped to not go to far into grey
+                    (attr['weight'] + 0.5) / 1.5,
+                    # value, also based on weight and remapped,
+                    # but also reversed. higher weight means
+                    # lower value (=darker)
+                    (-attr['weight'] + 4) / 4
+                ),
+            )
                 for node1, node2, attr in G.edges(data=True)
+                    if limits is None or (
+                        isinstance(limits, tuple) and
+                        len(limits) == 2 and
+                        attr['weight'] >= limits[0] and
+                        attr['weight'] <= limits[1]
+                    )
         ])
     nx.draw_networkx_edges(
             G,
@@ -51,8 +72,11 @@ def draw_attention_graph(adjmat, labels_to_index, n_layers, length):
             edgelist=edges,
             width=edge_widths,
             arrowsize=5, # smaller than default arrows
-            edge_color='darkblue'
+            edge_color=edge_colors
         )
+    if draw_edge_labels:
+        edge_labels = {(node1, node2): str(round(attr['capacity'],3)) for node1, node2, attr in G.edges(data=True)}
+        nx.draw_networkx_edge_labels(G,pos,edge_labels, label_pos=0.2)
 
     return G
 
