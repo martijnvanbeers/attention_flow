@@ -75,7 +75,16 @@ def draw_attention_graph(adjmat, labels_to_index, n_layers, length, draw_edge_la
             edge_color=edge_colors
         )
     if draw_edge_labels:
-        edge_labels = {(node1, node2): str(round(attr['capacity'],3)) for node1, node2, attr in G.edges(data=True)}
+        edge_labels = {
+                (node1, node2): str(round(attr['capacity'],3))
+                    for node1, node2, attr in G.edges(data=True)
+                        if limits is None or (
+                            isinstance(limits, tuple) and
+                            len(limits) == 2 and
+                            attr['weight'] >= limits[0] and
+                            attr['weight'] <= limits[1]
+                        )
+            }
         nx.draw_networkx_edge_labels(G,pos,edge_labels, label_pos=0.2)
 
     return G
